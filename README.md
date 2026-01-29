@@ -75,18 +75,13 @@ python3 incident_pack.py --target 10.20.30.40 --dns-name app.example.com --ports
 
 ---
 
-## Results & Impact
+## Results & Impact (observed)
 
-**Before:**
-- 30-60 min average triage time
-- Inconsistent evidence across engineers
-- Messy shift handoffs
+- Reduces first-pass triage time by standardizing baseline evidence collection
+- Improves shift handoffs (engineers inherit the same evidence structure every time)
+- Decreases re-triage (DNS/TCP/path/local state captured up front)
 
-**After:**
-- 15-20 min average triage time (**70% reduction**)
-- Every ticket starts with same baseline evidence
-- Clean handoffs (no re-triaging from scratch)
-- ~20 tickets/week using tool = **~15 hours engineering time saved per week**
+(Portfolio note: metrics are representative of real-world workflows; this repo is a public-safe template.)
 
 ---
 
