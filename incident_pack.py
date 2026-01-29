@@ -164,7 +164,7 @@ def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
     cmds = e.get("commands", [])
 
     lines: List[str] = []
-    lines.append(f"# Incident Evidence Pack")
+    lines.append("# Incident Evidence Pack")
     lines.append("")
     lines.append("## Metadata")
     lines.append(f"- Timestamp (UTC): `{meta.get('timestamp_utc')}`")
@@ -175,17 +175,6 @@ def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
         lines.append(f"- DNS Name: `{meta.get('dns_name')}`")
     if meta.get("ports"):
         lines.append(f"- Ports: `{', '.join(map(str, meta.get('ports', [])))}`")
-    lines.append("")
-
-    lines.append("## Prompt Inputs")
-    lines.append("")
-    lines.append("Enter incident context (press Enter to skip any field):")
-    lines.append("")
-    lines.append("- Impact (who/what is affected?):")
-    lines.append("- Symptoms (what is failing?):")
-    lines.append("- Scope (one user/site/many?):")
-    lines.append("- Recent changes (deploy/patch/network change?):")
-    lines.append("- Actions already taken:")
     lines.append("")
 
     lines.append("## Context")
