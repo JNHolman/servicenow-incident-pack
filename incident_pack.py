@@ -191,7 +191,7 @@ def build_markdown(e: Dict[str, Any]) -> str:
     lines.append("## Context")
     for k in ["impact", "symptoms", "scope", "recent_changes", "actions_taken"]:
         v = (ctx.get(k) or "").strip()
-        lines.append(f"- **{k.replace('_',' ').title()}**: {v if v else '_n/a_'}")
+        lines.append(f"- **{k.replace('_',' ').title()}**: {v}")
     lines.append("")
 
     lines.append("## Key Results")
