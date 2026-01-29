@@ -1,6 +1,6 @@
 {
   "meta": {
-    "timestamp_utc": "2026-01-29T05:07:17+00:00",
+    "timestamp_utc": "2026-01-29T05:19:27+00:00",
     "host": "Js-MBP-2.lan",
     "os": "macos",
     "target": "10.20.30.40",
@@ -13,11 +13,11 @@
     "mode": "mock"
   },
   "context": {
-    "impact": "Template run (public-safe).",
-    "symptoms": "Simulated evidence output.",
-    "scope": "n/a",
-    "recent_changes": "n/a",
-    "actions_taken": "n/a"
+    "impact": "",
+    "symptoms": "",
+    "scope": "",
+    "recent_changes": "",
+    "actions_taken": ""
   },
   "dns": {
     "name": "app.example.com",
