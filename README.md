@@ -20,6 +20,14 @@ In enterprise support environments, many tickets are submitted by non-technical 
 
 ---
 
+## Architecture
+
+![Architecture](docs/architecture.png)
+
+**Flow:** User runs script → Prompts for context → Collects evidence (DNS, TCP, OS commands) → Generates Markdown + JSON → Paste into ServiceNow
+
+---
+
 ## What it collects (Phase 1 — implemented)
 
 High-signal evidence that covers L1–L4 from the host/client perspective:
@@ -56,14 +64,14 @@ High-signal evidence that covers L1–L4 from the host/client perspective:
 - Python 3.10+ (stdlib only; no external dependencies)
 
 ### Live run
-````bash
+```bash
 python3 incident_pack.py --target 10.20.30.40 --dns-name app.example.com --ports 443 80 22
-````
+```
 
 ### Mock run (for deterministic GitHub demo output)
-````bash
-python3 incident_pack.py --target 10.20.30.40 --dns-name app.example.com --ports 443 80 22 --mock --out-dir examples
-````
+```bash
+python3 incident_pack.py --target 10.20.30.40 --dns-name app.example.com --ports 443 80 22 --mock --out-dir examples --non-interactive
+```
 
 ---
 
@@ -82,20 +90,6 @@ python3 incident_pack.py --target 10.20.30.40 --dns-name app.example.com --ports
 
 ---
 
-## Roadmap (Phase 2 — planned)
-
-Device-side evidence collection via SSH/APIs (template plan):
-
-- **Cisco** (Netmiko): BGP/OSPF neighbors, interfaces, trunks, STP, ARP
-- **Palo Alto** (API): traffic logs, session table, routing lookups
-- **Meraki/Aruba** (API): client connection state, SSID/VLAN mapping, AP health/uplink
-
-**Optional:**
-- ServiceNow API integration (auto-create/update incident)
-- Visualization for traceroute (graph/path summary)
-
----
-
 ## Technical Approach
 
 ### Cross-Platform Support
@@ -111,6 +105,46 @@ Graceful failure handling - if a command times out or fails, it's captured as ev
 - These are the exact commands engineers run manually anyway
 - Covers the most common failure points (L1-L4)
 - High signal-to-noise ratio
+
+### Design Decisions
+
+**Why JSON + Markdown?**
+- JSON: Structured data for future automation/tooling
+- Markdown: Human-readable, pastes cleanly into ServiceNow
+
+**Why these specific checks?**
+- Ping: Basic reachability
+- Traceroute: Path isolation
+- DNS: Separates name vs network issues
+- TCP connect: Layer 4 validation (more useful than ping for app troubleshooting)
+- Interface/routing/ARP: Local network state
+
+**Why `--mock` flag?**
+- Generates deterministic demo output for GitHub
+- Allows portfolio showcase without running live commands
+
+---
+
+## Roadmap (Phase 2 — planned)
+
+Device-side evidence collection via SSH/APIs (template plan):
+
+- **Cisco** (Netmiko): BGP/OSPF neighbors, interfaces, trunks, STP, ARP
+- **Palo Alto** (API): traffic logs, session table, routing lookups
+- **Meraki/Aruba** (API): client connection state, SSID/VLAN mapping, AP health/uplink
+
+**Optional:**
+- ServiceNow API integration (auto-create/update incident)
+- Visualization for traceroute (graph/path summary)
+- Historical trending to identify systematic issues
+
+---
+
+## Tech Stack
+
+- **Python 3.10+**
+- **Standard library only** (subprocess, socket, json, platform)
+- **Cross-platform** (Linux, macOS, Windows)
 
 ---
 
