@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "timestamp_utc": "2026-01-29T04:03:26+00:00",
+    "host": "Js-MBP-2.lan",
+    "os": "macos",
+    "target": "10.20.30.40",
+    "dns_name": "app.example.com",
+    "ports": [
+      443,
+      80,
+      22
+    ],
+    "mode": "mock"
+  },
+  "context": {
+    "impact": "Template run (public-safe).",
+    "symptoms": "Simulated evidence output.",
+    "scope": "n/a",
+    "recent_changes": "n/a",
+    "actions_taken": "n/a"
+  },
+  "dns": {
+    "name": "app.example.com",
+    "answers": [
+      "93.184.216.34"
+    ],
+    "error": ""
+  },
+  "tcp": [
+    {
+      "host": "10.20.30.40",
+      "port": 443,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "host": "10.20.30.40",
+      "port": 80,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "host": "10.20.30.40",
+      "port": 22,
+      "ok": false,
+      "error": "Connection refused"
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "ping ...",
+      "rc": 0,
+      "stdout": "PING output (mock)",
+      "stderr": ""
+    },
+    {
+      "cmd": "traceroute ...",
+      "rc": 0,
+      "stdout": "TRACEROUTE output (mock)",
+      "stderr": ""
+    },
+    {
+      "cmd": "ip/ifconfig ...",
+      "rc": 0,
+      "stdout": "Interface output (mock)",
+      "stderr": ""
+    }
+  ]
+}
