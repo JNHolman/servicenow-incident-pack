@@ -177,6 +177,17 @@ def build_markdown(e: Dict[str, Any]) -> str:
         lines.append(f"- Ports: `{', '.join(map(str, meta.get('ports', [])))}`")
     lines.append("")
 
+    lines.append("## Prompt Inputs")
+    lines.append("")
+    lines.append("Enter incident context (press Enter to skip any field):")
+    lines.append("")
+    lines.append("- Impact (who/what is affected?):")
+    lines.append("- Symptoms (what is failing?):")
+    lines.append("- Scope (one user/site/many?):")
+    lines.append("- Recent changes (deploy/patch/network change?):")
+    lines.append("- Actions already taken:")
+    lines.append("")
+
     lines.append("## Context")
     for k in ["impact", "symptoms", "scope", "recent_changes", "actions_taken"]:
         v = (ctx.get(k) or "").strip()
@@ -236,11 +247,11 @@ def mock_evidence(target: str, dns_name: Optional[str], ports: List[int]) -> Dic
             "mode": "mock",
         },
         "context": {
-            "impact": "Template run (public-safe).",
-            "symptoms": "Simulated evidence output.",
-            "scope": "n/a",
-            "recent_changes": "n/a",
-            "actions_taken": "n/a",
+            "impact": "",
+            "symptoms": "",
+            "scope": "",
+            "recent_changes": "",
+            "actions_taken": "",
         },
         "dns": {"name": dns_name or "", "answers": ["93.184.216.34"], "error": ""} if dns_name else {},
         "tcp": [{"host": target, "port": p, "ok": (p in (80, 443)), "error": "Connection refused"} for p in ports],
