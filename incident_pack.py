@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 
 
 def now_utc_iso() -> str:
+    """Return current UTC timestamp in ISO format."""
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
@@ -49,6 +50,10 @@ def run(cmd: List[str], timeout: int = 15) -> Dict[str, Any]:
 
 
 def resolve(name: str) -> Dict[str, Any]:
+    """
+    DNS resolution proof using socket.getaddrinfo().
+    Returns dict with 'answers' list or 'error' string.
+    """
     out: Dict[str, Any] = {"name": name, "answers": [], "error": ""}
     try:
         infos = socket.getaddrinfo(name, None)
@@ -60,6 +65,10 @@ def resolve(name: str) -> Dict[str, Any]:
 
 
 def tcp_check(host: str, port: int, timeout: float = 3.0) -> Dict[str, Any]:
+    """
+    Layer 4 TCP connect test.
+    Returns dict with 'ok' bool and 'error' string if failed.
+    """
     r: Dict[str, Any] = {"host": host, "port": port, "ok": False, "error": ""}
     try:
         with socket.create_connection((host, port), timeout=timeout):
@@ -70,6 +79,10 @@ def tcp_check(host: str, port: int, timeout: float = 3.0) -> Dict[str, Any]:
 
 
 def detect_os() -> str:
+    """
+    Detect operating system for platform-specific commands.
+    Returns: 'windows', 'macos', or 'linux'
+    """
     s = platform.system().lower()
     if "windows" in s:
         return "windows"
@@ -117,6 +130,10 @@ def os_commands(target: str) -> List[List[str]]:
 
 
 def prompt_context(non_interactive: bool) -> Dict[str, str]:
+    """
+    Prompt user for incident context (impact, symptoms, changes, etc.).
+    If non_interactive=True, returns empty dict.
+    """
     fields = [
         ("impact", "Impact (who/what is affected?)"),
         ("symptoms", "Symptoms (what is failing?)"),
@@ -137,6 +154,9 @@ def prompt_context(non_interactive: bool) -> Dict[str, str]:
 
 
 def build_markdown(e: Dict[str, Any]) -> str:
+    """
+    Convert evidence dict to Markdown format (ServiceNow-ready).
+    """
     meta = e["meta"]
     ctx = e["context"]
     dns = e.get("dns", {})
@@ -200,6 +220,9 @@ def build_markdown(e: Dict[str, Any]) -> str:
 
 
 def mock_evidence(target: str, dns_name: Optional[str], ports: List[int]) -> Dict[str, Any]:
+    """
+    Generate deterministic mock evidence for GitHub demos.
+    """
     host = platform.node() or "mock-host"
     os_name = detect_os()
     e: Dict[str, Any] = {
@@ -235,6 +258,10 @@ def mock_evidence(target: str, dns_name: Optional[str], ports: List[int]) -> Dic
 
 
 def main() -> int:
+    """
+    Main entry point: parse args, collect evidence, write outputs.
+    Returns 0 on success.
+    """
     ap = argparse.ArgumentParser(description="Generate a standardized incident evidence pack (JSON + Markdown).")
     ap.add_argument("--target", required=True, help="IP or hostname to test (e.g., 10.0.0.10)")
     ap.add_argument("--dns-name", default="", help="Optional DNS name to resolve (e.g., app.example.com)")
@@ -293,5 +320,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Entry point when run as script (not when imported as module)
     raise SystemExit(main())
-
