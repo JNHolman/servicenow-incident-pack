@@ -153,7 +153,7 @@ def prompt_context(non_interactive: bool) -> Dict[str, str]:
     return out
 
 
-def build_markdown(e: Dict[str, Any]) -> str:
+def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
     """
     Convert evidence dict to Markdown format (ServiceNow-ready).
     """
@@ -214,16 +214,27 @@ def build_markdown(e: Dict[str, Any]) -> str:
         lines.append(f"### `{c.get('cmd')}`")
         lines.append("")
         lines.append("```text")
-        out = c.get("stdout") or ""
-        err = c.get("stderr") or ""
+
+        out = (c.get("stdout") or "").strip()
+        err = (c.get("stderr") or "").strip()
+
+        combined = ""
         if out:
-            lines.append(out)
+            combined += out
         if err:
-            lines.append("")
-            lines.append("[stderr]")
-            lines.append(err)
-        if not out and not err:
+            combined += ("\n\n" if combined else "") + "[stderr]\n" + err
+        combined = combined.strip()
+
+        if combined:
+            out_lines = combined.splitlines()
+            if len(out_lines) > md_max_lines:
+                lines.extend(out_lines[:md_max_lines])
+                lines.append(f"... (truncated; full output preserved in JSON) [{len(out_lines)} lines total]")
+            else:
+                lines.append(combined)
+        else:
             lines.append("(no output)")
+
         lines.append("```")
         lines.append("")
 
@@ -281,6 +292,7 @@ def main() -> int:
     ap.add_argument("--non-interactive", action="store_true", help="Skip prompts (empty context fields)")
     ap.add_argument("--mock", action="store_true", help="Generate deterministic sample outputs (for GitHub demos)")
     ap.add_argument("--out-dir", default=".", help="Output directory (default: current)")
+    ap.add_argument("--md-max-lines", type=int, default=40, help="Max lines per command in Markdown (default: 40)")
     args = ap.parse_args()
 
     target = args.target
@@ -324,7 +336,7 @@ def main() -> int:
         json.dump(evidence, f, indent=2, sort_keys=False)
 
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(build_markdown(evidence))
+        f.write(build_markdown(evidence, md_max_lines=args.md_max_lines))
 
     print(f"Wrote:\n- {json_path}\n- {md_path}")
     return 0
@@ -333,3 +345,4 @@ def main() -> int:
 if __name__ == "__main__":
     # Entry point when run as script (not when imported as module)
     raise SystemExit(main())
+
