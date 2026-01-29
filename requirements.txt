@@ -1,0 +1,61 @@
+# No external dependencies required
+# Python 3.10+ standard library only
+#
+# Core modules used:
+# - subprocess (command execution)
+# - socket (DNS/TCP checks)
+# - json (structured output)
+# - platform (OS detection)
+# - argparse (CLI interface)
+# - datetime (timestamping)
+```
+
+---
+
+# 4. .gitignore
+```
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+virtualenv/
+
+# Output files (keep only examples/sample_output.*)
+incident_pack_*.json
+incident_pack_*.md
+!examples/sample_output.json
+!examples/sample_output.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+Desktop.ini
