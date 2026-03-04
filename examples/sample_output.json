@@ -1,13 +1,14 @@
 {
   "meta": {
     "timestamp_utc": "2026-01-29T06:07:27+00:00",
-    "host": "Js-MBP-2.lan",
-    "os": "macos",
-    "target": "1.1.1.1",
-    "dns_name": "example.com",
+    "host": "demo-host",
+    "os": "linux",
+    "target": "10.20.30.40",
+    "dns_name": "app.example.com",
     "ports": [
       443,
-      53
+      80,
+      22
     ],
     "mode": "mock"
   },
@@ -19,7 +20,7 @@
     "actions_taken": ""
   },
   "dns": {
-    "name": "example.com",
+    "name": "app.example.com",
     "answers": [
       "93.184.216.34"
     ],
@@ -27,14 +28,20 @@
   },
   "tcp": [
     {
-      "host": "1.1.1.1",
+      "host": "10.20.30.40",
       "port": 443,
       "ok": true,
       "error": ""
     },
     {
-      "host": "1.1.1.1",
-      "port": 53,
+      "host": "10.20.30.40",
+      "port": 80,
+      "ok": true,
+      "error": ""
+    },
+    {
+      "host": "10.20.30.40",
+      "port": 22,
       "ok": false,
       "error": "Connection refused"
     }

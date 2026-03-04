@@ -16,10 +16,19 @@ import datetime as dt
 import json
 import os
 import platform
+import re
 import socket
 import subprocess
-import sys
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence
+
+
+SUPPORTED_OS = {"windows", "macos", "linux"}
+DEFAULT_CMD_TIMEOUT = 15
+DEFAULT_TCP_TIMEOUT = 3.0
+DEFAULT_MD_MAX_LINES = 40
+MOCK_TIMESTAMP_UTC = "2026-01-29T06:07:27+00:00"
+MOCK_OS = "linux"
 
 
 def now_utc_iso() -> str:
@@ -27,13 +36,45 @@ def now_utc_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
-def run(cmd: List[str], timeout: int = 15) -> Dict[str, Any]:
+def sanitize_filename_component(value: str, default: str = "host") -> str:
+    """Return a filesystem-safe filename component."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", (value or "").strip())
+    cleaned = cleaned.strip(".-_")
+    return cleaned or default
+
+
+def normalize_ports(ports: Sequence[int]) -> List[int]:
+    """Deduplicate ports while preserving order."""
+    seen = set()
+    out: List[int] = []
+    for port in ports:
+        if port not in seen:
+            out.append(port)
+            seen.add(port)
+    return out
+
+
+def validate_ports(ports: Sequence[int]) -> None:
+    """Validate all TCP ports are in the valid range."""
+    invalid = [p for p in ports if p < 1 or p > 65535]
+    if invalid:
+        joined = ", ".join(str(p) for p in invalid)
+        raise ValueError(f"Invalid port(s): {joined}. Valid range is 1-65535.")
+
+
+def validate_md_max_lines(value: int) -> None:
+    """Validate Markdown output truncation settings."""
+    if value < 1:
+        raise ValueError("--md-max-lines must be at least 1.")
+
+
+def run(cmd: Sequence[str], timeout: int = DEFAULT_CMD_TIMEOUT) -> Dict[str, Any]:
     """
     Run a command and capture stdout/stderr/rc as evidence.
     Requirement: never crash the run; failures become evidence.
     """
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(list(cmd), capture_output=True, text=True, timeout=timeout, check=False)
         return {
             "cmd": " ".join(cmd),
             "rc": p.returncode,
@@ -64,18 +105,18 @@ def resolve(name: str) -> Dict[str, Any]:
     return out
 
 
-def tcp_check(host: str, port: int, timeout: float = 3.0) -> Dict[str, Any]:
+def tcp_check(host: str, port: int, timeout: float = DEFAULT_TCP_TIMEOUT) -> Dict[str, Any]:
     """
     Layer 4 TCP connect test.
     Returns dict with 'ok' bool and 'error' string if failed.
     """
-    r: Dict[str, Any] = {"host": host, "port": port, "ok": False, "error": ""}
+    result: Dict[str, Any] = {"host": host, "port": port, "ok": False, "error": ""}
     try:
         with socket.create_connection((host, port), timeout=timeout):
-            r["ok"] = True
+            result["ok"] = True
     except Exception as e:
-        r["error"] = f"{type(e).__name__}: {e}"
-    return r
+        result["error"] = f"{type(e).__name__}: {e}"
+    return result
 
 
 def detect_os() -> str:
@@ -83,12 +124,14 @@ def detect_os() -> str:
     Detect operating system for platform-specific commands.
     Returns: 'windows', 'macos', or 'linux'
     """
-    s = platform.system().lower()
-    if "windows" in s:
-        return "windows"
-    if "darwin" in s:
-        return "macos"
-    return "linux"
+    system_name = platform.system().lower()
+    if "windows" in system_name:
+        os_name = "windows"
+    elif "darwin" in system_name:
+        os_name = "macos"
+    else:
+        os_name = "linux"
+    return os_name if os_name in SUPPORTED_OS else "linux"
 
 
 def os_commands(target: str) -> List[List[str]]:
@@ -118,7 +161,6 @@ def os_commands(target: str) -> List[List[str]]:
             ["netstat", "-anv"],
         ]
 
-    # linux
     return [
         ["ip", "addr"],
         ["ip", "route"],
@@ -143,25 +185,26 @@ def prompt_context(non_interactive: bool) -> Dict[str, str]:
     ]
     out: Dict[str, str] = {}
     if non_interactive:
-        for k, _ in fields:
-            out[k] = ""
+        for key, _ in fields:
+            out[key] = ""
         return out
 
     print("\nEnter incident context (press Enter to skip any field):\n")
-    for k, label in fields:
-        out[k] = input(f"{label}: ").strip()
+    for key, label in fields:
+        try:
+            out[key] = input(f"{label}: ").strip()
+        except EOFError:
+            out[key] = ""
     return out
 
 
-def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
-    """
-    Convert evidence dict to Markdown format (ServiceNow-ready).
-    """
-    meta = e["meta"]
-    ctx = e["context"]
-    dns = e.get("dns", {})
-    tcp = e.get("tcp", [])
-    cmds = e.get("commands", [])
+def build_markdown(evidence: Dict[str, Any], md_max_lines: int = DEFAULT_MD_MAX_LINES) -> str:
+    """Convert evidence dict to Markdown format (ServiceNow-ready)."""
+    meta = evidence["meta"]
+    ctx = evidence["context"]
+    dns = evidence.get("dns", {})
+    tcp = evidence.get("tcp", [])
+    cmds = evidence.get("commands", [])
 
     lines: List[str] = []
     lines.append("# Incident Evidence Pack")
@@ -175,12 +218,14 @@ def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
         lines.append(f"- DNS Name: `{meta.get('dns_name')}`")
     if meta.get("ports"):
         lines.append(f"- Ports: `{', '.join(map(str, meta.get('ports', [])))}`")
+    if meta.get("mode"):
+        lines.append(f"- Mode: `{meta.get('mode')}`")
     lines.append("")
 
     lines.append("## Context")
-    for k in ["impact", "symptoms", "scope", "recent_changes", "actions_taken"]:
-        v = (ctx.get(k) or "").strip()
-        lines.append(f"- **{k.replace('_',' ').title()}**: {v}")
+    for key in ["impact", "symptoms", "scope", "recent_changes", "actions_taken"]:
+        value = (ctx.get(key) or "").strip()
+        lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
     lines.append("")
 
     lines.append("## Key Results")
@@ -191,34 +236,36 @@ def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
             answers = ", ".join(dns.get("answers", [])) or "none"
             lines.append(f"- DNS: ✅ `{dns.get('name')}` -> {answers}")
     if tcp:
-        for t in tcp:
-            if t.get("ok"):
-                lines.append(f"- TCP {t['host']}:{t['port']}: ✅ connect ok")
+        for test in tcp:
+            if test.get("ok"):
+                lines.append(f"- TCP {test['host']}:{test['port']}: ✅ connect ok")
             else:
-                lines.append(f"- TCP {t['host']}:{t['port']}: ❌ {t.get('error')}")
+                lines.append(f"- TCP {test['host']}:{test['port']}: ❌ {test.get('error')}")
     lines.append("")
 
     lines.append("## Raw Command Outputs")
-    for c in cmds:
-        lines.append(f"### `{c.get('cmd')}`")
+    for command_result in cmds:
+        lines.append(f"### `{command_result.get('cmd')}`")
         lines.append("")
         lines.append("```text")
 
-        out = (c.get("stdout") or "").strip()
-        err = (c.get("stderr") or "").strip()
+        stdout = (command_result.get("stdout") or "").strip()
+        stderr = (command_result.get("stderr") or "").strip()
 
         combined = ""
-        if out:
-            combined += out
-        if err:
-            combined += ("\n\n" if combined else "") + "[stderr]\n" + err
+        if stdout:
+            combined += stdout
+        if stderr:
+            combined += ("\n\n" if combined else "") + "[stderr]\n" + stderr
         combined = combined.strip()
 
         if combined:
             out_lines = combined.splitlines()
             if len(out_lines) > md_max_lines:
                 lines.extend(out_lines[:md_max_lines])
-                lines.append(f"... (truncated; full output preserved in JSON) [{len(out_lines)} lines total]")
+                lines.append(
+                    f"... (truncated; full output preserved in JSON) [{len(out_lines)} lines total]"
+                )
             else:
                 lines.append(combined)
         else:
@@ -231,16 +278,12 @@ def build_markdown(e: Dict[str, Any], md_max_lines: int = 40) -> str:
 
 
 def mock_evidence(target: str, dns_name: Optional[str], ports: List[int]) -> Dict[str, Any]:
-    """
-    Generate deterministic mock evidence for GitHub demos.
-    """
-    host = platform.node() or "mock-host"
-    os_name = detect_os()
-    e: Dict[str, Any] = {
+    """Generate deterministic mock evidence for GitHub demos."""
+    evidence: Dict[str, Any] = {
         "meta": {
-            "timestamp_utc": now_utc_iso(),
-            "host": host,
-            "os": os_name,
+            "timestamp_utc": MOCK_TIMESTAMP_UTC,
+            "host": "demo-host",
+            "os": MOCK_OS,
             "target": target,
             "dns_name": dns_name or "",
             "ports": ports,
@@ -253,85 +296,160 @@ def mock_evidence(target: str, dns_name: Optional[str], ports: List[int]) -> Dic
             "recent_changes": "",
             "actions_taken": "",
         },
-        "dns": {"name": dns_name or "", "answers": ["93.184.216.34"], "error": ""} if dns_name else {},
-        "tcp": [{"host": target, "port": p, "ok": (p in (80, 443)), "error": "Connection refused"} for p in ports],
+        "dns": {
+            "name": dns_name or "",
+            "answers": ["93.184.216.34"],
+            "error": "",
+        }
+        if dns_name
+        else {},
+        "tcp": [
+            {"host": target, "port": port, "ok": (port in (80, 443)), "error": "Connection refused"}
+            for port in ports
+        ],
         "commands": [
             {"cmd": "ping ...", "rc": 0, "stdout": "PING output (mock)", "stderr": ""},
             {"cmd": "traceroute ...", "rc": 0, "stdout": "TRACEROUTE output (mock)", "stderr": ""},
             {"cmd": "ip/ifconfig ...", "rc": 0, "stdout": "Interface output (mock)", "stderr": ""},
         ],
     }
-    # Fix errors for ports that are ok
-    for t in e["tcp"]:
-        if t["ok"]:
-            t["error"] = ""
-    return e
+    for test in evidence["tcp"]:
+        if test["ok"]:
+            test["error"] = ""
+    return evidence
 
 
-def main() -> int:
+def collect_live_evidence(
+    target: str,
+    dns_name: Optional[str],
+    ports: List[int],
+    timeout: int,
+    non_interactive: bool,
+) -> Dict[str, Any]:
+    """Collect live host-side evidence."""
+    host = platform.node() or "unknown-host"
+    os_name = detect_os()
+
+    evidence: Dict[str, Any] = {
+        "meta": {
+            "timestamp_utc": now_utc_iso(),
+            "host": host,
+            "os": os_name,
+            "target": target,
+            "dns_name": dns_name or "",
+            "ports": ports,
+            "mode": "live",
+        },
+        "context": prompt_context(non_interactive),
+        "dns": resolve(dns_name) if dns_name else {},
+        "tcp": [tcp_check(target, port) for port in ports],
+        "commands": [],
+    }
+
+    for command in os_commands(target):
+        evidence["commands"].append(run(command, timeout=timeout))
+
+    return evidence
+
+
+def choose_output_base(out_dir: str, host: str, timestamp: Optional[str] = None) -> str:
+    """Return a unique output base path, adding a numeric suffix if needed."""
+    stamp = timestamp or dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_host = sanitize_filename_component(host)
+    directory = Path(out_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    base_name = f"incident_pack_{safe_host}_{stamp}"
+    candidate = directory / base_name
+    suffix = 1
+    while candidate.with_suffix(".json").exists() or candidate.with_suffix(".md").exists():
+        candidate = directory / f"{base_name}_{suffix:02d}"
+        suffix += 1
+    return str(candidate)
+
+
+def write_outputs(evidence: Dict[str, Any], out_dir: str, md_max_lines: int) -> Dict[str, str]:
+    """Write JSON and Markdown outputs to disk."""
+    base = choose_output_base(out_dir, evidence["meta"].get("host", "host"))
+    json_path = f"{base}.json"
+    md_path = f"{base}.md"
+
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(evidence, handle, indent=2, sort_keys=False)
+
+    with open(md_path, "w", encoding="utf-8") as handle:
+        handle.write(build_markdown(evidence, md_max_lines=md_max_lines))
+
+    return {"json": json_path, "md": md_path}
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Create the CLI argument parser."""
+    parser = argparse.ArgumentParser(
+        description="Generate a standardized incident evidence pack (JSON + Markdown)."
+    )
+    parser.add_argument("--target", required=True, help="IP or hostname to test (e.g., 10.0.0.10)")
+    parser.add_argument(
+        "--dns-name", default="", help="Optional DNS name to resolve (e.g., app.example.com)"
+    )
+    parser.add_argument("--ports", nargs="*", type=int, default=[], help="Ports to test (e.g., 443 80 22)")
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_CMD_TIMEOUT,
+        help=f"Command timeout seconds (default: {DEFAULT_CMD_TIMEOUT})",
+    )
+    parser.add_argument(
+        "--non-interactive", action="store_true", help="Skip prompts (empty context fields)"
+    )
+    parser.add_argument(
+        "--mock", action="store_true", help="Generate deterministic sample outputs (for GitHub demos)"
+    )
+    parser.add_argument("--out-dir", default=".", help="Output directory (default: current)")
+    parser.add_argument(
+        "--md-max-lines",
+        type=int,
+        default=DEFAULT_MD_MAX_LINES,
+        help=f"Max lines per command in Markdown (default: {DEFAULT_MD_MAX_LINES})",
+    )
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
     """
     Main entry point: parse args, collect evidence, write outputs.
     Returns 0 on success.
     """
-    ap = argparse.ArgumentParser(description="Generate a standardized incident evidence pack (JSON + Markdown).")
-    ap.add_argument("--target", required=True, help="IP or hostname to test (e.g., 10.0.0.10)")
-    ap.add_argument("--dns-name", default="", help="Optional DNS name to resolve (e.g., app.example.com)")
-    ap.add_argument("--ports", nargs="*", type=int, default=[], help="Ports to test (e.g., 443 80 22)")
-    ap.add_argument("--timeout", type=int, default=15, help="Command timeout seconds (default: 15)")
-    ap.add_argument("--non-interactive", action="store_true", help="Skip prompts (empty context fields)")
-    ap.add_argument("--mock", action="store_true", help="Generate deterministic sample outputs (for GitHub demos)")
-    ap.add_argument("--out-dir", default=".", help="Output directory (default: current)")
-    ap.add_argument("--md-max-lines", type=int, default=40, help="Max lines per command in Markdown (default: 40)")
-    args = ap.parse_args()
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
 
-    target = args.target
+    try:
+        ports = normalize_ports(args.ports or [])
+        validate_ports(ports)
+        validate_md_max_lines(args.md_max_lines)
+    except ValueError as error:
+        parser.error(str(error))
+
+    target = args.target.strip()
+    if not target:
+        parser.error("--target cannot be empty.")
     dns_name = args.dns_name.strip() or None
-    ports = args.ports or []
-    out_dir = args.out_dir
 
     if args.mock:
         evidence = mock_evidence(target, dns_name, ports)
     else:
-        host = platform.node() or "unknown-host"
-        os_name = detect_os()
+        evidence = collect_live_evidence(
+            target=target,
+            dns_name=dns_name,
+            ports=ports,
+            timeout=args.timeout,
+            non_interactive=args.non_interactive,
+        )
 
-        evidence: Dict[str, Any] = {
-            "meta": {
-                "timestamp_utc": now_utc_iso(),
-                "host": host,
-                "os": os_name,
-                "target": target,
-                "dns_name": dns_name or "",
-                "ports": ports,
-                "mode": "live",
-            },
-            "context": prompt_context(args.non_interactive),
-            "dns": resolve(dns_name) if dns_name else {},
-            "tcp": [tcp_check(target, p) for p in ports],
-            "commands": [],
-        }
-
-        for cmd in os_commands(target):
-            evidence["commands"].append(run(cmd, timeout=args.timeout))
-
-    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    host = evidence["meta"].get("host", "host")
-    base = f"incident_pack_{host}_{ts}"
-    os.makedirs(out_dir, exist_ok=True)
-    json_path = os.path.join(out_dir, f"{base}.json")
-    md_path = os.path.join(out_dir, f"{base}.md")
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(evidence, f, indent=2, sort_keys=False)
-
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(build_markdown(evidence, md_max_lines=args.md_max_lines))
-
-    print(f"Wrote:\n- {json_path}\n- {md_path}")
+    output_paths = write_outputs(evidence, out_dir=args.out_dir, md_max_lines=args.md_max_lines)
+    print(f"Wrote:\n- {output_paths['json']}\n- {output_paths['md']}")
     return 0
 
 
 if __name__ == "__main__":
-    # Entry point when run as script (not when imported as module)
     raise SystemExit(main())
-
