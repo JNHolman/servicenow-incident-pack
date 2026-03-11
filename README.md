@@ -29,6 +29,7 @@ That slows triage, weakens handoffs, and wastes senior engineer time.
 
 `incident_pack.py` creates a consistent baseline evidence pack so every ticket starts with the same high-signal L1–L4 data in a format that is easy to read, easy to paste into ServiceNow, and easy to extend later.
 
+![Sample output](docs/output_preview.png)
 ---
 
 ## Architecture
